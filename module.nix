@@ -12,10 +12,32 @@
 
 let
   cfg = config.services.capev2;
+
+  settingsFormat = pkgs.formats.ini {
+    # CAPE lit les listes sous forme "a,b,c"
+    listToValue = lib.concatMapStringsSep "," toString;
+  };
+
+  confFiles = lib.mapAttrs (name: value: settingsFormat.generate "${name}.conf" value) cfg.settings;
 in
 {
   options.services.capev2 = {
     enable = lib.mkEnableOption "CAPEv2 malware sandbox";
+
+    settings = lib.mkOption {
+      type = lib.types.attrsOf settingsFormat.type;
+      default = { };
+      description = ''
+        Contenu des fichiers de conf/ de CAPEv2, sous la forme
+        `<fichier>.<section>.<clé>`. Chaque entrée génère
+        `conf/<fichier>.conf`, réécrit à chaque sync.
+      '';
+      example = lib.literalExpression ''
+        {
+          kvm.kvm.machines = "cuckoo1";
+        }
+      '';
+    };
 
     user = lib.mkOption {
       type = lib.types.str;
@@ -111,10 +133,15 @@ in
             "${capev2Src}/share/capev2/conf" \
             "${cfg.stateDir}/conf"
         fi
-
+        ${lib.concatStringsSep "\n" (
+          lib.mapAttrsToList (
+            name: file: ''install -D -m 0640 ${file} "${cfg.stateDir}/conf/${name}.conf"''
+          ) confFiles
+        )}
         chown -R ${cfg.user}:${cfg.group} ${cfg.stateDir}
         chmod 0750 ${cfg.stateDir}
       '';
+      restartTriggers = lib.attrValues confFiles;
     };
 
     systemd.services.cape-rooter = {
