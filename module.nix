@@ -118,10 +118,10 @@ in
       port = lib.mkDefault 27017;
       db = lib.mkDefault "cuckoo";
     };
-    services.capev2.settings.routing.routing.rooter = lib.mkDefault cfg.rooterSocket;
     services.capev2.settings.cuckoo.cuckoo = {
       freespace = 10000;  # en Mo
       freespace_processing = 5000;
+      rooter = lib.mkDefault cfg.rooterSocket;
     };
     services.capev2.settings.auxiliary.sniffer = {
       enabled = "yes";
