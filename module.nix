@@ -19,11 +19,20 @@ let
   };
 
   confFiles = lib.mapAttrs (name: value: settingsFormat.generate "${name}.conf" value) cfg.settings;
+  # Unités à attendre avant de lancer les services qui écrivent/lisent dans Mongo
+  mongoUnits = lib.optional cfg.mongodb.enable "mongodb.service";
 in
 {
   options.services.capev2 = {
     enable = lib.mkEnableOption "CAPEv2 malware sandbox";
-
+    mongodb.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Déploie un MongoDB local et configure le reporting de CAPE dessus.
+        Nécessaire pour consulter les analyses dans l'interface web.
+      '';
+    };
     settings = lib.mkOption {
       type = lib.types.attrsOf settingsFormat.type;
       default = { };
@@ -82,9 +91,38 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    environment.systemPackages = [
+      (pkgs.writeShellScriptBin "cape-run" ''
+        cd ${cfg.stateDir}
+        export LD_LIBRARY_PATH=${lib.makeLibraryPath [pkgs.file]}
+        export PYTHONDONTWRITEBYTECODE=1
+        exec ${pkgs.util-linux}/bin/runuser -u ${cfg.user} -- \
+          ${capev2Env}/bin/python3 "$@"
+      '')
+    ];
 
+    services.mongodb = lib.mkIf cfg.mongodb.enable {
+      enable = lib.mkDefault true;
+      bind_ip = lib.mkDefault "127.0.0.1";
+      package = lib.mkDefault pkgs.mongodb-ce;
+    };
+
+# MongoDB is unfree
+    nixpkgs.config.allowUnfreePredicate = lib.mkIf cfg.mongodb.enable (
+      pkg: lib.getName pkg == lib.getName config.services.mongodb.package
+    );
+
+    services.capev2.settings.reporting.mongodb = lib.mkIf cfg.mongodb.enable {
+      enabled = "yes";
+      host = lib.mkDefault "127.0.0.1";
+      port = lib.mkDefault 27017;
+      db = lib.mkDefault "cuckoo";
+    };
     services.capev2.settings.routing.routing.rooter = lib.mkDefault cfg.rooterSocket;
-    services.capev2.settings.cuckoo.cuckoo.freespace = 10000;  # en Mo
+    services.capev2.settings.cuckoo.cuckoo = {
+      freespace = 10000;  # en Mo
+      freespace_processing = 5000;
+    };
     users.users.${cfg.user} = {
       isSystemUser = true;
       group = cfg.group;
@@ -197,14 +235,14 @@ in
         "postgresql.service"
         "capev2-sync.service"
         "cape-rooter.service"
-      ];
+      ] ++ mongoUnits;
 
       requires = [
         "capev2-sync.service"
         "cape-rooter.service"
       ];
 
-      wants = [ "postgresql.service" ];
+      wants = [ "postgresql.service" ] ++ mongoUnits;
 
       wantedBy = [ "multi-user.target" ];
 
@@ -238,10 +276,10 @@ in
       after = [
         "capev2-sync.service"
         "cape.service"
-      ];
+      ] ++ mongoUnits;
 
       requires = [ "capev2-sync.service" ];
-
+      wants = mongoUnits;
       wantedBy = [ "multi-user.target" ];
 
       serviceConfig = {
@@ -269,11 +307,11 @@ in
         "postgresql.service"
         "capev2-sync.service"
         "cape.service"
-      ];
+      ] ++ mongoUnits;
 
       requires = [ "capev2-sync.service" ];
 
-      wants = [ "postgresql.service" ];
+      wants = [ "postgresql.service" ] ++ mongoUnits;
 
       wantedBy = [ "multi-user.target" ];
 
