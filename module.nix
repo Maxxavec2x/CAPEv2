@@ -115,11 +115,13 @@ in
           --no-perms \
           --no-owner \
           --no-group \
+          --no-times \
           --delete \
           --exclude 'conf/' \
           --exclude 'storage/' \
           --exclude 'log/' \
           --exclude 'db/' \
+          --exclude 'web/web/secret_key.py' \
           --exclude '__pycache__/' \
           --exclude '*.pyc' \
           ${capev2Src}/share/capev2/ ${cfg.stateDir}/
@@ -131,7 +133,7 @@ in
           ${cfg.stateDir}/db
 
         if [ ! -e "${cfg.stateDir}/conf" ]; then
-          cp -r --no-preserve=mode,ownership \
+          cp -r --no-preserve=mode,ownership,timestamps \
             "${capev2Src}/share/capev2/conf" \
             "${cfg.stateDir}/conf"
         fi
@@ -140,6 +142,9 @@ in
             name: file: ''install -D -m 0640 ${file} "${cfg.stateDir}/conf/${name}.conf"''
           ) confFiles
         )}
+        # Le store fige toutes les dates à 1970 : zipfile les refuse (< 1980)
+        find ${cfg.stateDir} -path ${cfg.stateDir}/storage -prune -o \
+        ! -newermt 1980-01-02 -exec touch -h {} +
         chown -R ${cfg.user}:${cfg.group} ${cfg.stateDir}
         chmod 0750 ${cfg.stateDir}
       '';
@@ -224,6 +229,12 @@ in
     systemd.services.cape-processor = {
       description = "CAPE processor";
 
+      environment = {
+        LD_LIBRARY_PATH = lib.makeLibraryPath [
+          pkgs.file
+        ];
+      };
+
       after = [
         "capev2-sync.service"
         "cape.service"
@@ -267,9 +278,8 @@ in
       wantedBy = [ "multi-user.target" ];
 
       serviceConfig = {
-        ExecStart =
-          "${capev2Env}/bin/python3 manage.py runserver_plus " + "--noreload ${cfg.web.bindAddress}";
 
+        ExecStart = "${capev2Env}/bin/python3 manage.py runserver_plus ${cfg.web.bindAddress}";
         WorkingDirectory = "${cfg.stateDir}/web";
 
         User = cfg.user;
