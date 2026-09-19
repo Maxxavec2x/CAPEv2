@@ -83,6 +83,8 @@ in
 
   config = lib.mkIf cfg.enable {
 
+    services.capev2.settings.routing.routing.rooter = lib.mkDefault cfg.rooterSocket;
+    services.capev2.settings.cuckoo.cuckoo.freespace = 10000;  # en Mo
     users.users.${cfg.user} = {
       isSystemUser = true;
       group = cfg.group;
@@ -155,7 +157,13 @@ in
       requires = [ "capev2-sync.service" ];
 
       wantedBy = [ "multi-user.target" ];
-      environment.PYTHONDONTWRITEBYTECODE = "1";
+      environment = {
+        LD_LIBRARY_PATH = lib.makeLibraryPath [
+          pkgs.file
+        ];
+        PYTHONDONTWRITEBYTECODE = "1";
+      };
+
       serviceConfig = {
         ExecStart = ''
           ${capev2Env}/bin/python3 \
@@ -269,7 +277,14 @@ in
 
         Restart = "on-failure";
         RestartSec = "5s";
+
       };
+      environment = {
+        LD_LIBRARY_PATH = lib.makeLibraryPath [
+          pkgs.file
+        ];
+      };
+
     };
 
     services.postgresql.enable = lib.mkDefault true;

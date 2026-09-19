@@ -90,7 +90,7 @@ allow_static = no
 # This tries to avoid failing an analysis because the reports can't be written
 # due out-of-diskspace errors. Setting this value to 0 disables the check.
 # (Note: this feature is currently not supported under Windows.)
-freespace = 50000
+freespace = 10000
 # Process tasks, but not reach out of memory
 freespace_processing = 15000
 
