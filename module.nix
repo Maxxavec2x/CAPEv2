@@ -123,13 +123,25 @@ in
       freespace = 10000;  # en Mo
       freespace_processing = 5000;
     };
+    services.capev2.settings.auxiliary.sniffer = {
+      enabled = "yes";
+      tcpdump = "/run/wrappers/bin/tcpdump";
+    };
+    users.groups.pcap = { };
     users.users.${cfg.user} = {
       isSystemUser = true;
       group = cfg.group;
       home = cfg.stateDir;
-      extraGroups = [ "libvirtd" ];
+      extraGroups = [ "libvirtd" "pcap" ];
     };
-
+    
+    security.wrappers.tcpdump = {
+      owner = "root";
+      group = "pcap";
+      capabilities = "cap_net_raw,cap_net_admin=eip";
+      permissions = "u+rx,g+x";
+      source = "${pkgs.tcpdump}/bin/tcpdump";
+    };
     users.groups.${cfg.group} = { };
 
     systemd.tmpfiles.rules = [
