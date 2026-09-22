@@ -72,6 +72,22 @@
           });
         };
 
+        volatilityFix = final: prev: {
+          volatility3 = prev.volatility3.overrideAttrs (old: {
+            nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
+              pkgs.pkg-config
+              final.setuptools
+            ];
+            buildInputs = (old.buildInputs or [ ]) ++ [ pkgs.libvirt ];
+            # le lien pointe hors du store, donc "cassé" au moment du build
+            dontCheckForBrokenSymlinks = true;
+            postInstall = (old.postInstall or "") + ''
+              sp=$out/lib/python3.11/site-packages/volatility3/symbols
+              rm -rf "$sp/windows"
+              ln -s /var/lib/capev2-symbols/windows "$sp/windows"
+            '';
+          });
+        };
         pythonSet =
           (pkgs.callPackage pyproject-nix.build.packages {
             python = pkgs.python311;
@@ -82,6 +98,7 @@
                 overlay
                 legacyPythonFixes
                 libvirtFix
+                volatilityFix
               ]
             );
 
@@ -99,7 +116,8 @@
             mkdir -p $out/share/capev2
 
             cp -r --no-preserve=mode . $out/share/capev2/
-
+            mkdir -p $out/share/capev2/data
+            ln -sf ${pkgs._7zz}/bin/7zz $out/share/capev2/data/7zz
             rm -rf \
               $out/share/capev2/.git \
               $out/share/capev2/.venv \

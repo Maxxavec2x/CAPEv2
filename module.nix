@@ -60,7 +60,7 @@ in
 
     stateDir = lib.mkOption {
       type = lib.types.path;
-      default = "/var/lib/capev2";
+      default = "/data/capev2";
       description = "Writable CAPEv2 state directory.";
     };
 
@@ -105,28 +105,106 @@ in
       enable = lib.mkDefault true;
       bind_ip = lib.mkDefault "127.0.0.1";
       package = lib.mkDefault pkgs.mongodb-ce;
+      dbpath = "/data/mongodb";
     };
 
 # MongoDB is unfree
     nixpkgs.config.allowUnfreePredicate = lib.mkIf cfg.mongodb.enable (
       pkg: lib.getName pkg == lib.getName config.services.mongodb.package
     );
+    services.capev2.processor.parallel = "3";
 
-    services.capev2.settings.reporting.mongodb = lib.mkIf cfg.mongodb.enable {
-      enabled = "yes";
-      host = lib.mkDefault "127.0.0.1";
-      port = lib.mkDefault 27017;
-      db = lib.mkDefault "cuckoo";
+    # Mettre yes au lieu de true parce que c'est comme ça dans la conf
+    services.capev2.settings = {
+        cuckoo.cuckoo = {
+          freespace = 10000;  # en Mo
+          freespace_processing = 5000;
+          rooter = lib.mkDefault cfg.rooterSocket;
+          memory_dump = "yes";
+        };
+        reporting.mongodb = lib.mkIf cfg.mongodb.enable {
+          enabled = "yes";
+          host = lib.mkDefault "127.0.0.1";
+          port = lib.mkDefault 27017;
+          db = lib.mkDefault "cuckoo";
+        };
+        reporting.compression = {
+            enabled = "yes";
+            compressiontool = "pyzipper";
+        };
+        processing.memory = {
+            enabled = "yes";
+        };
+        processing.behavior = {
+            enabled = "yes";
+            ram_boost = "yes"; # A tester, prend bcp de ram
+        };
+        auxiliary.sniffer = {
+          enabled = "yes";
+          tcpdump = "/run/wrappers/bin/tcpdump";
+        };
+        memory = {
+          basic = {
+            dostrings = "yes";
+            strings_nullterminated_only = "yes";
+            strings_minchars = 5;
+            delete_memdump = "yes";
+            delete_memdump_on_exception = "no";
+          };
+
+          mask.enabled = "no";
+          malfind = {
+            enabled = "yes";
+            filter = "off";
+          };
+
+          pslist = {
+            enabled = "yes";
+            filter = "off";
+          };
+
+          psscan = {
+            enabled = "yes";
+            filter = "off";
+          };
+
+          handles = {
+            enabled = "off";
+            filter = "on";
+          };
+
+          svcscan = {
+            enabled = "off";
+            filter = "on";
+          };
+
+          modscan = {
+            enabled = "off";
+            filter = "on";
+          };
+
+          psxview = {
+            enabled = "yes";
+            filter = "off";
+          };
+
+          ldrmodules = {
+            enabled = "yes";
+            filter = "off";
+          };
+
+          devicetree = {
+            enabled = "off";
+            filter = "off";
+          };
+
+          unhookedsyscalls = {
+            enabled = "yes";
+            filter = "off";
+          };
+        };
     };
-    services.capev2.settings.cuckoo.cuckoo = {
-      freespace = 10000;  # en Mo
-      freespace_processing = 5000;
-      rooter = lib.mkDefault cfg.rooterSocket;
-    };
-    services.capev2.settings.auxiliary.sniffer = {
-      enabled = "yes";
-      tcpdump = "/run/wrappers/bin/tcpdump";
-    };
+
     users.groups.pcap = { };
     users.users.${cfg.user} = {
       isSystemUser = true;
@@ -147,6 +225,9 @@ in
     systemd.tmpfiles.rules = [
       "d ${cfg.stateDir} 0750 ${cfg.user} ${cfg.group} - -"
       "d /var/run/capev2 0750 ${cfg.user} ${cfg.group} - -"
+      "d /data/mongodb 0750 mongodb mongodb - -"
+      "d /var/lib/capev2-symbols 0750 ${cfg.user} ${cfg.group} - -"
+      "d /var/lib/capev2-symbols/windows 0750 ${cfg.user} ${cfg.group} - -"
     ];
 
     systemd.services.capev2-sync = {
@@ -344,7 +425,6 @@ in
           pkgs.file
         ];
       };
-
     };
 
     services.postgresql.enable = lib.mkDefault true;
